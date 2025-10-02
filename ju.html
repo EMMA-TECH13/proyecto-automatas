@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mini Compilador Web</title>
+<style>
+body { font-family: monospace; background: #1e1e1e; color: #ccc; margin: 0; padding: 0; }
+#container { display: flex; height: 100vh; }
+#editor { width: 50%; padding: 10px; background: #252526; color: #fff; overflow: auto; }
+#output { width: 50%; padding: 10px; background: #111; color: #0f0; overflow: auto; }
+textarea { width: 100%; height: 90%; background: #1e1e1e; color: #fff; border: none; resize: none; font-family: monospace; font-size: 14px; }
+button, select { margin: 5px; padding: 5px; font-size: 14px; }
+.error { color: #f44; }
+</style>
+</head>
+<body>
+<div id="container">
+  <div id="editor">
+    <select id="langSelect">
+      <option value="python">Python</option>
+      <option value="js">JavaScript</option>
+      <option value="csharp">C#</option>
+      <option value="sql">SQL</option>
+    </select>
+    <button onclick="analyzeCode()">Analizar Sintaxis</button>
+    <button onclick="runCode()">Ejecutar</button>
+    <textarea id="codeArea"># Escribe tu código aquí</textarea>
+  </div>
+  <div id="output">
+    <h3>Salida</h3>
+    <div id="result"></div>
+  </div>
+</div>
+
+<script>
+const codeArea = document.getElementById('codeArea');
+const resultDiv = document.getElementById('result');
+const langSelect = document.getElementById('langSelect');
+
+// Base de datos en memoria
+const database = {
+  Clientes: [
+    { Id: 1, Nombre: "Ana", Edad: 25 },
+    { Id: 2, Nombre: "Luis", Edad: 35 },
+    { Id: 3, Nombre: "Marta", Edad: 42 }
+  ],
+  Productos: [
+    { Id: 1, Nombre: "Laptop", Precio: 1200 },
+    { Id: 2, Nombre: "Mouse", Precio: 25 }
+  ]
+};
+
+// Analizador sintáctico simple
+function analyzeCode() {
+    const lang = langSelect.value;
+    const code = codeArea.value;
+    const lines = code.split('\n');
+    let output = '';
+
+    for(let i=0;i<lines.length;i++){
+        const line = lines[i].trim();
+        if(line === '') continue;
+
+        if(lang === 'python'){
+            if(line.startsWith('print') && !line.match(/^print\(.*\)$/)){
+                output += `<div class="error">Error línea ${i+1}: print mal escrito</div>`;
+            }
+        }
+
+        if(lang === 'js'){
+            if(line.startsWith('console.log') && !line.match(/^console\.log\(.*\);$/)){
+                output += `<div class="error">Error línea ${i+1}: console.log mal escrito</div>`;
+            }
+        }
+
+        if(lang === 'csharp'){
+            if(line.includes('Console.WriteLine') && !line.endsWith(';')){
+                output += `<div class="error">Error línea ${i+1}: falta ; en Console.WriteLine</div>`;
+            }
+        }
+
+        if(lang === 'sql'){
+            if(line.toLowerCase().startsWith('select') && !line.endsWith(';')){
+                output += `<div class="error">Error línea ${i+1}: falta ; al final del SELECT</div>`;
+            }
+        }
+    }
+
+    if(output === '') output = '✓ Sin errores detectados';
+    resultDiv.innerHTML = output;
+}
+
+// Ejecutar código
+function runCode() {
+  const code = codeArea.value;
+  const lang = langSelect.value;
+
+  if (lang === "sql") {
+    resultDiv.textContent = ejecutarSQL(code);
+  } else {
+    resultDiv.innerHTML = "// Simulación de ejecución de " + lang + "...\n\n" + code;
+  }
+}
+
+// Ejecutor SQL simple
+function ejecutarSQL(query) {
+  query = query.trim();
+  const regex = /^SELECT (.+) FROM (\w+)(?: WHERE (.+))?;?$/i;
+  const match = query.match(regex);
+
+  if (!match) {
+    return "❌ Error de sintaxis SQL";
+  }
+
+  const columnas = match[1].split(",").map(c => c.trim());
+  const tabla = match[2];
+  const condicion = match[3];
+
+  if (!database[tabla]) {
+    return "❌ La tabla '" + tabla + "' no existe.";
+  }
+
+  let resultados = database[tabla];
+
+  if (condicion) {
+    try {
+      resultados = resultados.filter(row => {
+        return Function("row", "with(row){ return " + condicion + "; }")(row);
+      });
+    } catch (err) {
+      return "❌ Error en la condición: " + condicion;
+    }
+  }
+
+  const salida = resultados.map(row => {
+    if (columnas[0] === "*") return row;
+    let obj = {};
+    columnas.forEach(col => {
+      if (row[col] !== undefined) obj[col] = row[col];
+    });
+    return obj;
+  });
+
+  return salida.length ? JSON.stringify(salida, null, 2) : "⚠️ Sin resultados.";
+}
+</script>
+</body>
+</html>

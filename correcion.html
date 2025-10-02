@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mini Compilador Web</title>
+<style>
+body { font-family: monospace; background: #1e1e1e; color: #ccc; margin: 0; padding: 0; }
+#container { display: flex; height: 100vh; }
+#editor { width: 50%; padding: 10px; background: #252526; color: #fff; overflow: auto; }
+#output { width: 50%; padding: 10px; background: #111; color: #0f0; overflow: auto; }
+textarea { width: 100%; height: 90%; background: #1e1e1e; color: #fff; border: none; resize: none; font-family: monospace; font-size: 14px; }
+button, select { margin: 5px; padding: 5px; font-size: 14px; }
+.error { color: #f44; }
+</style>
+</head>
+<body>
+<div id="container">
+  <div id="editor">
+    <select id="langSelect">
+      <option value="python">Python</option>
+      <option value="js">JavaScript</option>
+      <option value="csharp">C#</option>
+      <option value="sql">SQL</option>
+    </select>
+    <button onclick="analyzeCode()">Analizar</button>
+    <button onclick="runCode()">Ejecutar (Simulado)</button>
+    <textarea id="codeArea"># Escribe tu código aquí</textarea>
+  </div>
+  <div id="output">
+    <h3>Salida</h3>
+    <div id="result"></div>
+  </div>
+</div>
+
+<script>
+const codeArea = document.getElementById('codeArea');
+const resultDiv = document.getElementById('result');
+const langSelect = document.getElementById('langSelect');
+
+// Simulación de análisis de sintaxis básica
+function analyzeCode() {
+    const lang = langSelect.value;
+    const code = codeArea.value;
+    const lines = code.split('\n');
+    let output = '';
+    let variables = new Set();
+
+    for(let i=0;i<lines.length;i++){
+        const line = lines[i].trim();
+        if(line === '') continue;
+
+        // Python
+        if(lang === 'python'){
+            if(line.startsWith('print') && !line.match(/^print\(.*\)$/)){
+                output += `<div class="error">Error línea ${i+1}: print mal escrito</div>`;
+            }
+            if(line.includes('=') && !line.startsWith('print')){
+                const parts = line.split('=');
+                const varName = parts[0].trim();
+                if(!varName.match(/^[A-Za-z_][A-Za-z0-9_]*$/))
+                    output += `<div class="error">Error línea ${i+1}: nombre de variable inválido</div>`;
+                variables.add(varName);
+            }
+        }
+
+        // JavaScript
+        if(lang === 'js'){
+            if(line.startsWith('console.log') && !line.match(/^console\.log\(.*\);$/)){
+                output += `<div class="error">Error línea ${i+1}: console.log mal escrito</div>`;
+            }
+            if(line.startsWith('let') || line.startsWith('const') || line.startsWith('var')){
+                const parts = line.split('=');
+                const varName = parts[0].replace(/let|const|var/g,'').trim();
+                variables.add(varName);
+            }
+        }
+
+        // C#
+        if(lang === 'csharp'){
+            if(line.includes('Console.WriteLine') && !line.endsWith(';')){
+                output += `<div class="error">Error línea ${i+1}: falta ; en Console.WriteLine</div>`;
+            }
+        }
+
+        // SQL
+        if(lang === 'sql'){
+            if(line.toLowerCase().startsWith('select') && !line.endsWith(';')){
+                output += `<div class="error">Error línea ${i+1}: falta ; al final del SELECT</div>`;
+            }
+        }
+    }
+
+    if(output === '') output = '✓ Sin errores detectados';
+    resultDiv.innerHTML = output;
+}
+
+// Simulación de ejecución (solo imprime variables)
+function runCode() {
+    const code = codeArea.value;
+    let output = '';
+    const lines = code.split('\n');
+    for(let i=0;i<lines.length;i++){
+        const line = lines[i].trim();
+        if(line.startsWith('print(') || line.startsWith('console.log')){
+            output += line + '<br>';
+        }
+    }
+    if(output==='') output = '// Simulación: no se ejecutó nada real';
+    resultDiv.innerHTML = output;
+}
+</script>
+</body>
+</html>

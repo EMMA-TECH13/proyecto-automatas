@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador Léxico</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #4c1663 0%, #23065c 100%);
+            min-height: 100vh;
+            color: rgb(255, 255, 255);
+        }
+        .container {
+            background: rgba(159, 108, 108, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(104, 102, 102, 0.18);
+        }
+
+        h1 {
+            text-align: center;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(115, 114, 114, 0.3);
+            margin-bottom: 30px;
+        }
+        
+        .input-section {
+            margin-bottom: 30px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #d67d7d;
+        }
+        
+        #codeInput {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #716e6e;
+            box-shadow: inset 0 2px 4px rgba(102, 95, 95, 0.1);
+        }
+        
+        button {
+            background: linear-gradient(45deg, #ff5353, #ffbb28);
+            color: rgb(255, 255, 255);
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 15px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(105, 105, 105, 0.2);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(129, 126, 126, 0.3);
+        }
+        
+        .results {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .results {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .section {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .section h3 {
+            color: #ffd700;
+            margin-top: 0;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.3);
+            padding-bottom: 10px;
+        }
+        
+        .tokens-table, .categories-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .tokens-table th, .tokens-table td,
+        .categories-table th, .categories-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .tokens-table th, .categories-table th {
+            background: rgba(255, 255, 255, 0.1);
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        .token-type {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+            min-width: 80px;
+            text-align: center;
+        }
+        
+        .keyword { background: #e74c3c; color: white; }
+        .identifier { background: #3498db; color: white; }
+        .number { background: #f39c12; color: white; }
+        .operator { background: #9b59b6; color: white; }
+        .delimiter { background: #1abc9c; color: white; }
+        .category-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-radius: 8px;
+            border-left: 4px solid #ffd700;
+        }
+        
+        .lexemes-list {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Analizador Léxico</h1>
+        <div class="input-section">
+            <label for="codeInput">Línea de código a analizar:</label>
+            <input type="text" id="codeInput" value="float x = 25.5 + y;" placeholder="Ingresa tu código aquí (puedes usar múltiples líneas)..." style="height: 60px;">
+            <button onclick="analyzeCode()">Analizar Código</button>
+        </div>
+        <div class="results">
+            <div class="section">
+                <h3>📝 Lexemas Identificados</h3>
+                <div id="lexemes" class="lexemes-list">
+                </div>
+            </div>
+        
+            <div class="section">
+                <h3>🏷️ Categorías Léxicas</h3>
+                <div id="categories">
+                </div>
+            </div>
+        </div>
+        <div class="section" style="margin-top: 30px;">
+            <h3>🎯 Tokens Propuestos</h3>
+            <table class="tokens-table" id="tokensTable">
+                <thead>
+                    <tr>
+                        <th>Token #</th>
+                        <th>Lexema</th>
+                        <th>Tipo</th>
+                        <th>Línea</th>
+                        <th>Columna</th>
+                        <th>Descripción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script>
+        const tokenDefinitions = {
+            keywords: ['float', 'int', 'double', 'char', 'void', 'if', 'else', 'for', 'while', 'return'],
+            operators: ['+', '-', '*', '/', '=', '==', '!=', '<', '>', '<=', '>='],
+            delimiters: [';', ',', '(', ')', '{', '}', '[', ']'],
+            patterns: {
+                identifier: /^[a-zA-Z_][a-zA-Z0-9_]*$/,
+                number: /^[0-9]+(\.[0-9]+)?$/,
+                string: /^".*"$/,
+            }
+        };
+
+        // Códigos fijos por lexema
+        const lexemeCodes = {
+            // Keywords
+            'float': 101, 'int': 102, 'double': 103, 'char': 104, 'void': 105,
+            'if': 106, 'else': 107, 'for': 108, 'while': 109, 'return': 110,
+            // Operators
+            '+': 201, '-': 202, '*': 203, '/': 204, '=': 205, '==': 206, '!=': 207,
+            '<': 208, '>': 209, '<=': 210, '>=': 211,
+            // Delimiters
+            ';': 301, ',': 302, '(': 303, ')': 304, '{': 305, '}': 306, '[': 307, ']': 308
+        };
+
+        // Contadores para códigos dinámicos
+        let identifierCode = 400;
+        let numberCode = 500;
+        let stringCode = 600;
+        let unknownCode = 700;
+
+        function analyzeCode() {
+            const code = document.getElementById('codeInput').value.trim();
+            if (!code) {
+                alert('Por favor, ingresa una línea de código para analizar.');
+                return;
+            }
+            const lexemes = tokenize(code);
+            const tokens = classifyTokens(lexemes);
+            displayLexemes(lexemes);
+            displayCategories(tokens);
+            displayTokensTable(tokens);
+        }
+
+        function tokenize(code) {
+            const lexemes = [];
+            let current = '';
+            let line = 1;
+            let column = 1;
+            let tokenStartColumn = 1;
+            for (let i = 0; i < code.length; i++) {
+                const char = code[i];
+
+                if (char === '\n') {
+                    if (current) {
+                        lexemes.push({ value: current, line, column: tokenStartColumn });
+                        current = '';
+                    }
+                    line++;
+                    column = 1;
+                    tokenStartColumn = 1;
+                } else if (char === ' ' || char === '\t') {
+                    if (current) {
+                        lexemes.push({ value: current, line, column: tokenStartColumn });
+                        current = '';
+                    }
+                    column++;
+                    tokenStartColumn = column;
+                } else if (isDelimiterOrOperator(char)) {
+                    if (current) {
+                        lexemes.push({ value: current, line, column: tokenStartColumn });
+                        current = '';
+                    }
+                    lexemes.push({ value: char, line, column });
+                    column++;
+                    tokenStartColumn = column;
+                } else {
+                    if (current === '') tokenStartColumn = column;
+                    current += char;
+                    column++;
+                }
+            }
+
+            if (current) lexemes.push({ value: current, line, column: tokenStartColumn });
+            return lexemes;
+        }
+
+        function isDelimiterOrOperator(char) {
+            return tokenDefinitions.operators.includes(char) || tokenDefinitions.delimiters.includes(char);
+        }
+
+        function classifyTokens(lexemes) {
+            const dynamicCodes = {};
+            return lexemes.map(lexemeObj => {
+                const lexeme = lexemeObj.value;
+                let type, description, tokenNumber;
+
+                if (tokenDefinitions.keywords.includes(lexeme)) {
+                    type = 'keyword';
+                    description = 'Palabra reservada del lenguaje';
+                    tokenNumber = lexemeCodes[lexeme];
+                } else if (tokenDefinitions.operators.includes(lexeme)) {
+                    type = 'operator';
+                    description = 'Operador aritmético o de asignación';
+                    tokenNumber = lexemeCodes[lexeme];
+                } else if (tokenDefinitions.delimiters.includes(lexeme)) {
+                    type = 'delimiter';
+                    description = 'Delimitador de sentencia';
+                    tokenNumber = lexemeCodes[lexeme];
+                } else if (tokenDefinitions.patterns.number.test(lexeme)) {
+                    type = 'number';
+                    description = 'Literal numérico';
+                    if (!dynamicCodes[lexeme]) dynamicCodes[lexeme] = numberCode++;
+                    tokenNumber = dynamicCodes[lexeme];
+                } else if (tokenDefinitions.patterns.string.test(lexeme)) {
+                    type = 'string';
+                    description = 'Literal de cadena';
+                    if (!dynamicCodes[lexeme]) dynamicCodes[lexeme] = stringCode++;
+                    tokenNumber = dynamicCodes[lexeme];
+                } else if (tokenDefinitions.patterns.identifier.test(lexeme)) {
+                    type = 'identifier';
+                    description = 'Identificador de variable';
+                    if (!dynamicCodes[lexeme]) dynamicCodes[lexeme] = identifierCode++;
+                    tokenNumber = dynamicCodes[lexeme];
+                } else {
+                    type = 'unknown';
+                    description = 'Token no reconocido';
+                    if (!dynamicCodes[lexeme]) dynamicCodes[lexeme] = unknownCode++;
+                    tokenNumber = dynamicCodes[lexeme];
+                }
+
+                return { 
+                    lexeme, type, description, tokenNumber,
+                    line: lexemeObj.line,
+                    column: lexemeObj.column
+                };
+            });
+        }
+
+        function displayLexemes(lexemes) {
+            const lexemesDiv = document.getElementById('lexemes');
+            lexemesDiv.innerHTML = `
+                <strong>Lexemas encontrados:</strong><br>
+                ${lexemes.map((lex, i) => `<span style="background: rgba(255,255,255,0.1); padding: 2px 6px; margin: 2px; border-radius: 4px; display: inline-block;">${i+1}. "${lex.value}" (L:${lex.line}, C:${lex.column})</span>`).join(' ')}
+                <br><br>
+                <strong>Total de lexemas:</strong> ${lexemes.length}
+            `;
+        }
+
+        function displayCategories(tokens) {
+            const categories = {};
+            tokens.forEach(token => {
+                if (!categories[token.type]) categories[token.type] = [];
+                if (!categories[token.type].some(item => item.lexeme === token.lexeme))
+                    categories[token.type].push({ lexeme: token.lexeme, line: token.line, column: token.column });
+            });
+
+            const categoriesDiv = document.getElementById('categories');
+            let html = '';
+            const categoryNames = { keyword: 'Palabras Reservadas', identifier: 'Identificadores', number: 'Números', operator: 'Operadores', delimiter: 'Delimitadores', string: 'Cadenas', unknown: 'No Reconocidos' };
+            
+            Object.keys(categories).forEach(category => {
+                html += `<div class="category-item"><strong>${categoryNames[category] || category}:</strong><br>
+                ${categories[category].map(item => `<code style="background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px;">${item.lexeme} (L:${item.line}, C:${item.column})</code>`).join(', ')}
+                </div>`;
+            });
+            categoriesDiv.innerHTML = html;
+        }
+
+        function displayTokensTable(tokens) {
+            const tbody = document.querySelector('#tokensTable tbody');
+            tbody.innerHTML = '';
+            tokens.forEach(token => {
+                const row = tbody.insertRow();
+                row.innerHTML = `<td><strong>${token.tokenNumber}</strong></td>
+                                 <td><code>${token.lexeme}</code></td>
+                                 <td><span class="token-type ${token.type}">${token.type.toUpperCase()}</span></td>
+                                 <td>${token.line}</td>
+                                 <td>${token.column}</td>
+                                 <td>${token.description}</td>`;
+            });
+        }
+
+        window.onload = analyzeCode;
+    </script>
+</body>
+</html>

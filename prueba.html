@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mini IDE Multi-Lenguaje</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #1e1e1e; color: #fff; }
+  header { padding: 10px; background: #333; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { margin: 0; font-size: 1.4em; }
+  #controls button { margin-left: 8px; padding: 6px 12px; border:none; border-radius:4px; cursor:pointer; }
+  #controls button:hover { background: #555; color: #fff; }
+  #editorContainer { height: 60vh; border-radius: 8px; overflow: hidden; margin: 10px; }
+  #editor { width: 100%; height: 100%; }
+  #output { height: 25vh; margin: 10px; padding: 10px; background: #111; border-radius: 8px; overflow-y: auto; white-space: pre-wrap; }
+  select { padding: 5px; border-radius: 4px; background: #222; color: #fff; border: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Mini IDE Multi-Lenguaje</h1>
+  <div id="controls">
+    <select id="languageSelect">
+      <option value="python">Python</option>
+      <option value="csharp">C#</option>
+      <option value="sql">SQL</option>
+      <option value="javascript">JavaScript</option>
+    </select>
+    <button id="btnExample">Cargar Ejemplo</button>
+    <button id="btnRun">Ejecutar</button>
+    <button id="btnClear">Limpiar</button>
+  </div>
+</header>
+
+<div id="editorContainer">
+  <div id="editor"></div>
+</div>
+
+<div id="output">Salida del programa...</div>
+
+<!-- ACE Editor -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.15.2/ace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.15.2/ext-language_tools.min.js"></script>
+<script>
+  const editor = ace.edit("editor", {
+    mode: "ace/mode/python",
+    theme: "ace/theme/monokai",
+    fontSize: "13pt",
+    showPrintMargin: false,
+    wrap: true,
+    enableBasicAutocompletion: true,
+    enableLiveAutocompletion: true
+  });
+  editor.setOptions({ readOnly: false, highlightActiveLine: true, highlightSelectedWord: true });
+  editor.focus();
+
+  const output = document.getElementById('output');
+  const languageSelect = document.getElementById('languageSelect');
+
+  // Cambiar modo de Ace según lenguaje
+  languageSelect.addEventListener('change', () => {
+    const lang = languageSelect.value;
+    if(lang === 'python') editor.session.setMode("ace/mode/python");
+    if(lang === 'csharp') editor.session.setMode("ace/mode/csharp");
+    if(lang === 'sql') editor.session.setMode("ace/mode/sql");
+    if(lang === 'javascript') editor.session.setMode("ace/mode/javascript");
+  });
+
+  // Ejemplo básico según lenguaje
+  const ejemplos = {
+    python: `# Python ejemplo
+x = 10
+y = 20
+print("Suma:", x + y)`,
+    csharp: `// C# ejemplo
+int x = 10;
+int y = 20;
+Console.WriteLine("Suma: " + (x + y));`,
+    sql: `-- SQL ejemplo
+SELECT * FROM Clientes WHERE Edad > 30;`,
+    javascript: `// JS ejemplo
+let x = 10;
+let y = 20;
+console.log("Suma:", x + y);`
+  };
+
+  function loadExample() {
+    const lang = languageSelect.value;
+    editor.setValue(ejemplos[lang], -1);
+    output.textContent = "// Ejemplo cargado para " + lang;
+  }
+
+  function clearAll() {
+    editor.setValue('', -1);
+    output.textContent = "// Limpio";
+  }
+
+  function runCode() {
+    const code = editor.getValue();
+    const lang = languageSelect.value;
+    output.textContent = "// Simulación de ejecución de " + lang + "...\n\n" + code;
+  }
+
+  document.getElementById('btnExample').addEventListener('click', loadExample);
+  document.getElementById('btnClear').addEventListener('click', clearAll);
+  document.getElementById('btnRun').addEventListener('click', runCode);
+
+  window.addEventListener('load', () => {
+    loadExample(); // cargar ejemplo al inicio
+  });
+</script>
+
+</body>
+</html>
