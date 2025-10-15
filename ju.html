@@ -2,147 +2,291 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Mini Compilador Web</title>
+<title>Mini IDE + Analizador + Compilador</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
-body { font-family: monospace; background: #1e1e1e; color: #ccc; margin: 0; padding: 0; }
-#container { display: flex; height: 100vh; }
-#editor { width: 50%; padding: 10px; background: #252526; color: #fff; overflow: auto; }
-#output { width: 50%; padding: 10px; background: #111; color: #0f0; overflow: auto; }
-textarea { width: 100%; height: 90%; background: #1e1e1e; color: #fff; border: none; resize: none; font-family: monospace; font-size: 14px; }
-button, select { margin: 5px; padding: 5px; font-size: 14px; }
-.error { color: #f44; }
+  body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #1e1e1e; color: #fff; }
+  header { padding: 10px; background: #333; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { margin: 0; font-size: 1.4em; }
+  #controls button { margin-left: 8px; padding: 6px 12px; border:none; border-radius:4px; cursor:pointer; background:#444; color:#fff; }
+  #controls button:hover { background: #555; color: #ffd700; }
+  #editorContainer { height: 50vh; border-radius: 8px; overflow: hidden; margin: 10px; }
+  #editor { width: 100%; height: 100%; }
+  #results { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 10px; }
+  .panel { background: #111; border-radius: 8px; padding: 10px; overflow-y: auto; }
+  .panel h3 { margin-top: 0; font-size: 1em; border-bottom: 1px solid #444; padding-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+  th, td { padding: 6px; border-bottom: 1px solid #333; }
+  th { background: #222; color: #ffd700; }
+  .token-type { padding: 2px 6px; border-radius: 6px; font-size: 0.8em; font-weight: bold; }
+  .keyword { background: #9b236d; color: white; }
+  .identifier { background: #3498db; color: white; }
+  .number { background: #f39c12; color: white; }
+  .operator { background: #9b59b6; color: white; }
+  .unknown { background: #661313; color: white; }
+  .delimiter { background: #1abc9c; color: white; }
+  .string { background: #0e1d77; color: white; }
+  .error { color: #f44; }
+  #btnUpload { background: #2e7d32; }
+  #btnUpload:hover { background: #43a047; }
 </style>
 </head>
 <body>
-<div id="container">
-  <div id="editor">
-    <select id="langSelect">
+
+<header>
+  <h1>⚡ Mini IDE Multi-Lenguaje</h1>
+  <div id="controls">
+    <select id="languageSelect">
       <option value="python">Python</option>
-      <option value="js">JavaScript</option>
       <option value="csharp">C#</option>
       <option value="sql">SQL</option>
+      <option value="javascript">JavaScript</option>
     </select>
-    <button onclick="analyzeCode()">Analizar Sintaxis</button>
-    <button onclick="runCode()">Ejecutar</button>
-    <textarea id="codeArea"># Escribe tu código aquí</textarea>
+    <input type="file" id="fileInput" style="display:none" accept=".py,.js,.cs,.sql,.txt">
+    <button id="btnUpload"><i class="fa fa-upload"></i> Subir Archivo</button>
+    <button id="btnExample">Ejemplo</button>
+    <button id="btnRun">Ejecutar</button>
+    <button id="btnLex">Analizar Léxico</button>
+    <button id="btnSyntax">Analizar Sintaxis</button>
+    <button id="btnClear">Limpiar</button>
   </div>
-  <div id="output">
-    <h3>Salida</h3>
-    <div id="result"></div>
+</header>
+
+<div id="editorContainer">
+  <div id="editor"></div>
+</div>
+
+<div id="results">
+  <div class="panel">
+    <h3>💻 Salida</h3>
+    <div id="output">// Esperando ejecución...</div>
+  </div>
+  <div class="panel">
+    <h3>🔍 Análisis Léxico</h3>
+    <div id="lexemes"></div>
+    <table id="tokensTable">
+      <thead>
+        <tr><th>#</th><th>Lexema</th><th>Tipo</th><th>Línea</th><th>Col</th><th>Desc</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="panel">
+    <h3>🧩 Análisis Sintáctico</h3>
+    <div id="syntaxResult">// Sin análisis...</div>
   </div>
 </div>
 
+<!-- ACE Editor -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.15.2/ace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.15.2/ext-language_tools.min.js"></script>
 <script>
-const codeArea = document.getElementById('codeArea');
-const resultDiv = document.getElementById('result');
-const langSelect = document.getElementById('langSelect');
+  // Configuración del editor
+  const editor = ace.edit("editor", {
+    mode: "ace/mode/python",
+    theme: "ace/theme/monokai",
+    fontSize: "13pt",
+    showPrintMargin: false,
+    wrap: true,
+    enableBasicAutocompletion: true,
+    enableLiveAutocompletion: true
+  });
+  editor.focus();
 
-// Base de datos en memoria
-const database = {
-  Clientes: [
-    { Id: 1, Nombre: "Ana", Edad: 25 },
-    { Id: 2, Nombre: "Luis", Edad: 35 },
-    { Id: 3, Nombre: "Marta", Edad: 42 }
-  ],
-  Productos: [
-    { Id: 1, Nombre: "Laptop", Precio: 1200 },
-    { Id: 2, Nombre: "Mouse", Precio: 25 }
-  ]
-};
+  const output = document.getElementById('output');
+  const syntaxDiv = document.getElementById('syntaxResult');
+  const languageSelect = document.getElementById('languageSelect');
 
-// Analizador sintáctico simple
-function analyzeCode() {
-    const lang = langSelect.value;
-    const code = codeArea.value;
-    const lines = code.split('\n');
-    let output = '';
-
-    for(let i=0;i<lines.length;i++){
-        const line = lines[i].trim();
-        if(line === '') continue;
-
-        if(lang === 'python'){
-            if(line.startsWith('print') && !line.match(/^print\(.*\)$/)){
-                output += `<div class="error">Error línea ${i+1}: print mal escrito</div>`;
-            }
-        }
-
-        if(lang === 'js'){
-            if(line.startsWith('console.log') && !line.match(/^console\.log\(.*\);$/)){
-                output += `<div class="error">Error línea ${i+1}: console.log mal escrito</div>`;
-            }
-        }
-
-        if(lang === 'csharp'){
-            if(line.includes('Console.WriteLine') && !line.endsWith(';')){
-                output += `<div class="error">Error línea ${i+1}: falta ; en Console.WriteLine</div>`;
-            }
-        }
-
-        if(lang === 'sql'){
-            if(line.toLowerCase().startsWith('select') && !line.endsWith(';')){
-                output += `<div class="error">Error línea ${i+1}: falta ; al final del SELECT</div>`;
-            }
-        }
-    }
-
-    if(output === '') output = '✓ Sin errores detectados';
-    resultDiv.innerHTML = output;
-}
-
-// Ejecutar código
-function runCode() {
-  const code = codeArea.value;
-  const lang = langSelect.value;
-
-  if (lang === "sql") {
-    resultDiv.textContent = ejecutarSQL(code);
-  } else {
-    resultDiv.innerHTML = "// Simulación de ejecución de " + lang + "...\n\n" + code;
-  }
-}
-
-// Ejecutor SQL simple
-function ejecutarSQL(query) {
-  query = query.trim();
-  const regex = /^SELECT (.+) FROM (\w+)(?: WHERE (.+))?;?$/i;
-  const match = query.match(regex);
-
-  if (!match) {
-    return "❌ Error de sintaxis SQL";
-  }
-
-  const columnas = match[1].split(",").map(c => c.trim());
-  const tabla = match[2];
-  const condicion = match[3];
-
-  if (!database[tabla]) {
-    return "❌ La tabla '" + tabla + "' no existe.";
-  }
-
-  let resultados = database[tabla];
-
-  if (condicion) {
-    try {
-      resultados = resultados.filter(row => {
-        return Function("row", "with(row){ return " + condicion + "; }")(row);
-      });
-    } catch (err) {
-      return "❌ Error en la condición: " + condicion;
-    }
-  }
-
-  const salida = resultados.map(row => {
-    if (columnas[0] === "*") return row;
-    let obj = {};
-    columnas.forEach(col => {
-      if (row[col] !== undefined) obj[col] = row[col];
-    });
-    return obj;
+  // Cambiar modo Ace
+  languageSelect.addEventListener('change', () => {
+    const lang = languageSelect.value;
+    if(lang === 'python') editor.session.setMode("ace/mode/python");
+    if(lang === 'csharp') editor.session.setMode("ace/mode/csharp");
+    if(lang === 'sql') editor.session.setMode("ace/mode/sql");
+    if(lang === 'javascript') editor.session.setMode("ace/mode/javascript");
   });
 
-  return salida.length ? JSON.stringify(salida, null, 2) : "⚠️ Sin resultados.";
-}
+  // Ejemplos
+  const ejemplos = {
+    python: `# Python ejemplo
+x = 10
+y = 20
+print("Suma:", x + y)`,
+    csharp: `// C# ejemplo
+int x = 10;
+int y = 20;
+Console.WriteLine("Suma: " + (x + y));`,
+    sql: `-- SQL ejemplo
+SELECT * FROM Clientes WHERE Edad > 30;`,
+    javascript: `// JS ejemplo
+let x = 10;
+let y = 20;
+console.log("Suma:", x + y);`
+  };
+
+  // Botones principales
+  document.getElementById('btnExample').onclick = () => {
+    const lang = languageSelect.value;
+    editor.setValue(ejemplos[lang], -1);
+    output.textContent = "// Ejemplo cargado para " + lang;
+  };
+
+  document.getElementById('btnClear').onclick = () => {
+    editor.setValue('', -1);
+    output.textContent = "// Limpio";
+    syntaxDiv.textContent = "// Sin análisis...";
+    document.querySelector('#tokensTable tbody').innerHTML = '';
+    document.getElementById('lexemes').innerHTML = '';
+  };
+
+  // Ejecutar (simulado)
+  document.getElementById('btnRun').onclick = () => {
+    const code = editor.getValue();
+    const lang = languageSelect.value;
+    output.innerHTML = "// Simulación de ejecución (" + lang + ")<br><br>" + code.replace(/\n/g,"<br>");
+  };
+
+  /* ---------------- LÉXICO ---------------- */
+  const tokenDefinitions = {
+    keywords: ['float','int','double','char','void','if','else','for','while','return','let','const','var','print','console','log','SELECT'],
+    operators: ['+','-','*','/','=','==','!=','<','>','<=','>='],
+    delimiters: [';',';',',','(',')','{','}','[',']'],
+    patterns: {
+      identifier: /^[a-zA-Z_][a-zA-Z0-9_]*$/,
+      number: /^[0-9]+(\.[0-9]+)?$/,
+      string: /^".*"$/
+    }
+  };
+
+  let identifierCode = 400, numberCode = 500, stringCode = 600, unknownCode = 700;
+
+  function tokenize(code) {
+    const lexemes = [];
+    let current = '';
+    let line = 1, column = 1, startCol = 1;
+    for (let i=0; i<code.length; i++) {
+      const char = code[i];
+      if(char === '\n'){
+        if(current) { lexemes.push({value:current,line,column:startCol}); current=''; }
+        line++; column=1; startCol=1;
+      } else if(/\s/.test(char)){
+        if(current) { lexemes.push({value:current,line,column:startCol}); current=''; }
+        column++; startCol=column;
+      } else if(tokenDefinitions.operators.includes(char) || tokenDefinitions.delimiters.includes(char)){
+        if(current) { lexemes.push({value:current,line,column:startCol}); current=''; }
+        lexemes.push({value:char,line,column});
+        column++; startCol=column;
+      } else {
+        if(current==='') startCol=column;
+        current+=char; column++;
+      }
+    }
+    if(current) lexemes.push({value:current,line,column:startCol});
+    return lexemes;
+  }
+
+  function classifyTokens(lexemes) {
+    const dynamicCodes = {};
+    return lexemes.map(lx => {
+      let type, desc, code;
+      if(tokenDefinitions.keywords.includes(lx.value)) { type='keyword'; desc='Palabra reservada'; code=100; }
+      else if(tokenDefinitions.operators.includes(lx.value)) { type='operator'; desc='Operador'; code=200; }
+      else if(tokenDefinitions.delimiters.includes(lx.value)) { type='delimiter'; desc='Delimitador'; code=300; }
+      else if(tokenDefinitions.patterns.number.test(lx.value)) { type='number'; desc='Número'; code=dynamicCodes[lx.value]||=numberCode++; }
+      else if(tokenDefinitions.patterns.string.test(lx.value)) { type='string'; desc='Cadena'; code=dynamicCodes[lx.value]||=stringCode++; }
+      else if(tokenDefinitions.patterns.identifier.test(lx.value)) { type='identifier'; desc='Identificador'; code=dynamicCodes[lx.value]||=identifierCode++; }
+      else { type='unknown'; desc='Desconocido'; code=dynamicCodes[lx.value]||=unknownCode++; }
+      return {lexeme:lx.value,type,desc,tokenNumber:code,line:lx.line,column:lx.column};
+    });
+  }
+
+  function analyzeLexico() {
+    const code = editor.getValue();
+    const lexemes = tokenize(code);
+    const tokens = classifyTokens(lexemes);
+
+    document.getElementById('lexemes').innerHTML =
+      `<strong>Total:</strong> ${lexemes.length}<br>` +
+      lexemes.map((lx,i)=>`${i+1}. "${lx.value}" (L:${lx.line},C:${lx.column})`).join('<br>');
+
+    const tbody = document.querySelector('#tokensTable tbody');
+    tbody.innerHTML='';
+    tokens.forEach(t=>{
+      const row=tbody.insertRow();
+      row.innerHTML=`<td>${t.tokenNumber}</td><td><code>${t.lexeme}</code></td>
+      <td><span class="token-type ${t.type}">${t.type.toUpperCase()}</span></td>
+      <td>${t.line}</td><td>${t.column}</td><td>${t.desc}</td>`;
+    });
+  }
+  document.getElementById('btnLex').onclick = analyzeLexico;
+
+  /* ---------------- SINTAXIS ---------------- */
+  function analyzeSyntax() {
+    const lang = languageSelect.value;
+    const code = editor.getValue();
+    const lines = code.split('\n');
+    let errors = '';
+    for(let i=0;i<lines.length;i++){
+      const line = lines[i].trim();
+      if(line==='') continue;
+
+      if(lang==='python'){
+        if(line.startsWith('print') && !line.match(/^print\(.*\)$/)){
+          errors+=`<div class="error">Error línea ${i+1}: print mal escrito</div>`;
+        }
+      }
+      if(lang==='javascript'){
+        if(line.startsWith('console.log') && !line.match(/^console\.log\(.*\);$/)){
+          errors+=`<div class="error">Error línea ${i+1}: console.log mal escrito</div>`;
+        }
+      }
+      if(lang==='csharp'){
+        if(line.includes('Console.WriteLine') && !line.endsWith(';')){
+          errors+=`<div class="error">Error línea ${i+1}: falta ; en Console.WriteLine</div>`;
+        }
+      }
+      if(lang==='sql'){
+        if(line.toLowerCase().startsWith('select') && !line.endsWith(';')){
+          errors+=`<div class="error">Error línea ${i+1}: falta ; al final del SELECT</div>`;
+        }
+      }
+    }
+    syntaxDiv.innerHTML = errors || '✓ Sin errores detectados';
+  }
+  document.getElementById('btnSyntax').onclick = analyzeSyntax;
+
+  /* ---------------- SUBIR ARCHIVO ---------------- */
+  const fileInput = document.getElementById('fileInput');
+  const btnUpload = document.getElementById('btnUpload');
+
+  btnUpload.onclick = () => fileInput.click();
+
+  fileInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target.result;
+      editor.setValue(content, -1);
+
+      const ext = file.name.split('.').pop().toLowerCase();
+      switch (ext) {
+        case 'py': languageSelect.value = 'python'; editor.session.setMode("ace/mode/python"); break;
+        case 'cs': languageSelect.value = 'csharp'; editor.session.setMode("ace/mode/csharp"); break;
+        case 'sql': languageSelect.value = 'sql'; editor.session.setMode("ace/mode/sql"); break;
+        case 'js': languageSelect.value = 'javascript'; editor.session.setMode("ace/mode/javascript"); break;
+        default: output.innerHTML = "// Tipo de archivo desconocido, usando modo texto"; 
+      }
+
+      output.innerHTML = `// Archivo "${file.name}" cargado correctamente`;
+      analyzeLexico(); // Analiza automáticamente después de cargar
+    };
+    reader.readAsText(file);
+  });
+
+  // Cargar ejemplo al inicio
+  window.onload = () => { editor.setValue(ejemplos['python'], -1); };
 </script>
 </body>
 </html>
