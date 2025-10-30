@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Compilador Completo Multi-Lenguaje</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.0/full/pyodide.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background: #0d1117; color: #c9d1d9; }
+  header { padding: 12px 20px; background: linear-gradient(135deg, #1f2937 0%, #111827 100%); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  header h1 { margin: 0; font-size: 1.5em; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  #controls { display: flex; gap: 8px; align-items: center; }
+  #controls select, #controls button { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+  #controls select { background: #1f2937; color: #fff; border: 1px solid #374151; }
+  #controls button { background: #374151; color: #fff; font-weight: 500; }
+  #controls button:hover { background: #4b5563; transform: translateY(-1px); }
+  #controls button:active { transform: translateY(0); }
+  .btn-primary { background: #3b82f6 !important; }
+  .btn-primary:hover { background: #2563eb !important; }
+  .btn-success { background: #10b981 !important; }
+  .btn-success:hover { background: #059669 !important; }
+  
+  #editorContainer { height: 45vh; border-radius: 8px; overflow: hidden; margin: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  #editor { width: 100%; height: 100%; }
+  
+  #tabs { display: flex; gap: 8px; margin: 0 15px; padding: 10px 0; border-bottom: 2px solid #1f2937; }
+  .tab { padding: 8px 16px; background: #1f2937; border-radius: 6px 6px 0 0; cursor: pointer; transition: all 0.2s; font-weight: 500; }
+  .tab:hover { background: #374151; }
+  .tab.active { background: #3b82f6; color: white; }
+  
+  #results { margin: 15px; display: grid; grid-template-columns: 1fr; gap: 15px; }
+  .result-panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; display: none; }
+  .result-panel.active { display: block; }
+  .result-panel h3 { margin: 0 0 12px 0; font-size: 1.1em; color: #58a6ff; display: flex; align-items: center; gap: 8px; }
+  
+  table { width: 100%; border-collapse: collapse; font-size: 0.9em; margin-top: 10px; }
+  th, td { padding: 8px; border-bottom: 1px solid #30363d; text-align: left; }
+  th { background: #1f2937; color: #58a6ff; font-weight: 600; }
+  tr:hover { background: #0d1117; }
+  
+  .token-type { padding: 3px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 600; display: inline-block; }
+  .keyword { background: #9b236d; color: white; }
+  .identifier { background: #3b82f6; color: white; }
+  .number { background: #f59e0b; color: white; }
+  .operator { background: #8b5cf6; color: white; }
+  .unknown { background: #dc2626; color: white; }
+  .delimiter { background: #10b981; color: white; }
+  .string { background: #0e7490; color: white; }
+  .comment { background: #6b7280; color: white; }
+  
+  .error { color: #f87171; font-weight: 500; padding: 8px; background: rgba(248, 113, 113, 0.1); border-left: 3px solid #f87171; margin: 8px 0; border-radius: 4px; }
+  .success { color: #34d399; font-weight: 500; padding: 8px; background: rgba(52, 211, 153, 0.1); border-left: 3px solid #34d399; margin: 8px 0; border-radius: 4px; }
+  .warning { color: #fbbf24; font-weight: 500; padding: 8px; background: rgba(251, 191, 36, 0.1); border-left: 3px solid #fbbf24; margin: 8px 0; border-radius: 4px; }
+  
+  .tree-node { margin-left: 20px; font-family: 'Courier New', monospace; font-size: 0.9em; line-height: 1.6; }
+  .tree-node::before { content: '├─ '; color: #6b7280; }
+  .tree-node.last::before { content: '└─ '; }
+  .node-type { color: #3b82f6; font-weight: 600; }
+  .node-value { color: #10b981; }
+  
+  .code-output { background: #0d1117; padding: 12px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 0.9em; line-height: 1.6; border: 1px solid #30363d; max-height: 400px; overflow-y: auto; }
+  
+  input[type="file"] { display: none; }
+  
+  .symbol-row { transition: background 0.2s; }
+  .symbol-row:hover { background: #1f2937; }
+  
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #0d1117; }
+  ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #484f58; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🚀 Compilador Completo Multi-Lenguaje</h1>
+  <div id="controls">
+    <select id="languageSelect">
+      <option value="python">Python</option>
+      <option value="javascript">JavaScript</option>
+      <option value="csharp">C#</option>
+      <option value="mysql">MySQL</option>
+    </select>
+    <button id="btnExample">📝 Ejemplo</button>
+    <button id="btnCompile" class="btn-primary">⚙️ Compilar Todo</button>
+    <button id="btnRun" class="btn-success">▶️ Ejecutar</button>
+    <button id="btnClear">🗑️ Limpiar</button>
+    <button id="btnUpload">📁 Subir</button>
+    <input type="file" id="fileInput" accept=".txt,.py,.js,.cs,.sql">
+  </div>
+</header>
+
+<div id="editorContainer">
+  <div id="editor"></div>
+</div>
+
+<div id="tabs">
+  <div class="tab active" data-tab="output">💻 Salida</div>
+  <div class="tab" data-tab="lexical">🔍 Léxico</div>
+  <div class="tab" data-tab="syntax">🧩 Sintáctico</div>
+  <div class="tab" data-tab="semantic">🧠 Semántico</div>
+  <div class="tab" data-tab="symbols">📋 Símbolos</div>
+  <div class="tab" data-tab="intermediate">⚡ Código Intermedio</div>
+  <div class="tab" data-tab="optimized">🎯 Optimizado</div>
+  <div class="tab" data-tab="grammar">📚 Gramática</div>
+  <div class="tab" data-tab="automata">⚙️ Autómatas</div>
+</div>
+
+<div id="results">
+  <div class="result-panel active" id="output-panel">
+    <h3>💻 Salida de Ejecución</h3>
+    <div class="code-output" id="output">// Esperando compilación y ejecución...</div>
+  </div>
+  
+  <div class="result-panel" id="lexical-panel">
+    <h3>🔍 Análisis Léxico</h3>
+    <div id="lexicalSummary"></div>
+    <table id="tokensTable">
+      <thead>
+        <tr><th>Token #</th><th>Lexema</th><th>Tipo</th><th>Línea</th><th>Columna</th><th>Descripción</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  
+  <div class="result-panel" id="syntax-panel">
+    <h3>🧩 Análisis Sintáctico</h3>
+    <div id="syntaxResult"></div>
+    <div id="astTree"></div>
+  </div>
+  
+  <div class="result-panel" id="semantic-panel">
+    <h3>🧠 Análisis Semántico</h3>
+    <div id="semanticResult"></div>
+  </div>
+  
+  <div class="result-panel" id="symbols-panel">
+    <h3>📋 Tabla de Símbolos</h3>
+    <table id="symbolsTable">
+      <thead>
+        <tr><th>Nombre</th><th>Tipo</th><th>Valor</th><th>Alcance</th><th>Línea</th><th>Usado</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  
+  <div class="result-panel" id="intermediate-panel">
+    <h3>⚡ Código Intermedio (3 Direcciones)</h3>
+    <div class="code-output" id="intermediateCode"></div>
+  </div>
+  
+  <div class="result-panel" id="optimized-panel">
+    <h3>🎯 Código Optimizado</h3>
+    <div class="code-output" id="optimizedCode"></div>
+  </div>
+
+  <div class="result-panel" id="grammar-panel">
+    <h3>📚 Gramática (subconjunto soportado)</h3>
+    <pre class="code-output" id="grammarBox"></pre>
+  </div>
+
+  <div class="result-panel" id="automata-panel">
+    <h3>⚙️ Autómatas (DFA de tokens clave)</h3>
+    <div id="automataContainer"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.15.2/ace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.15.2/ext-language_tools.min.js"></script>
+
+<script>
+// ============= CONFIGURACIÓN DEL EDITOR =============
+const editor = ace.edit("editor", {
+  mode: "ace/mode/python",
+  theme: "ace/theme/monokai",
+  fontSize: "14pt",
+  showPrintMargin: false,
+  wrap: true,
+  enableBasicAutocompletion: true,
+  enableLiveAutocompletion: true
+});
+editor.focus();
+
+const languageSelect = document.getElementById('languageSelect');
+languageSelect.addEventListener('change', () => {
+  const modes = { python: 'python', javascript: 'javascript', csharp: 'csharp', mysql: 'sql' };
+  editor.session.setMode("ace/mode/" + modes[languageSelect.value]);
+  showGrammar(languageSelect.value);
+  showAutomata(languageSelect.value);
+});
+
+// ============= EJEMPLOS =============
+const ejemplos = {
+  python: `# Ejemplo Python completo
+x = 10
+y = 20
+z = x + y
+print("La suma es:", z)
+if z > 25:
+    print("Mayor que 25")
+else:
+    print("Menor o igual a 25")`,
+  
+  javascript: `// Ejemplo JavaScript completo
+let x = 10;
+let y = 20;
+let z = x + y;
+console.log("La suma es:", z);
+if (z > 25) {
+    console.log("Mayor que 25");
+} else {
+    console.log("Menor o igual a 25");
+}`,
+  
+  csharp: `// Ejemplo C# completo
+int x = 10;
+int y = 20;
+int z = x + y;
+Console.WriteLine("La suma es: " + z);
+if (z > 25) {
+    Console.WriteLine("Mayor que 25");
+} else {
+    Console.WriteLine("Menor o igual a 25");
+}`,
+  
+  mysql: `-- Ejemplo MySQL
+SELECT nombre, edad, salario
+FROM empleados
+WHERE edad > 30 AND salario > 50000
+ORDER BY salario DESC;`
+};
+
+// ============= GESTIÓN DE TABS =============
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.result-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab + '-panel').classList.add('active');
+  });
+});
+
+// ============= BOTONES =============
+document.getElementById('btnExample').onclick = () => {
+  editor.setValue(ejemplos[languageSelect.value], -1);
+};
+
+document.getElementById('btnClear').onclick = () => {
+  editor.setValue('', -1);
+  document.getElementById('output').innerHTML = '// Editor limpio';
+  document.querySelectorAll('tbody').forEach(tb => tb.innerHTML = '');
+};
+
+const fileInput = document.getElementById('fileInput');
+document.getElementById('btnUpload').onclick = () => fileInput.click();
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => editor.setValue(ev.target.result, -1);
+  reader.readAsText(file);
+});
+
+
+// ============= GRAMÁTICAS (BNF/EBNF) Y AUTÓMATAS (DFA) =============
+const GRAMATICAS = {
+  javascript: `Programa   -> (Decl | Stmt)*
+Decl       -> ("let" | "const") Ident ("=" Exp)? ";"
+Stmt       -> Asig ";" | IfStmt | ForStmt | PrintStmt
+Asig       -> Ident "=" Exp
+IfStmt     -> "if" "(" Exp ")" Bloque ("else" ("if" "(" Exp ")" Bloque | Bloque))?
+ForStmt    -> "for" "(" (Decl | Asig)? ";" Exp? ";" Asig? ")" Bloque
+PrintStmt  -> "console" "." "log" "(" ArgList? ")"
+Bloque     -> "{" (Decl | Stmt)* "}"
+Exp        -> Exp ("===" | "!==" | "==" | "!=" | "<" | ">" | "<=" | ">=") Exp
+            | Exp ("+"|"-"|"*"|"/"|"%"|"&&"|"||") Exp
+            | Prim
+Prim       -> Número | Cadena | Ident | "(" Exp ")"`,
+  csharp: `Programa   -> (Decl | Stmt)*
+Decl       -> ( "int"|"double"|"float"|"string"|"bool" ) Ident ("=" Exp)? ";"
+Stmt       -> Asig ";" | IfStmt | ForStmt | PrintStmt
+Asig       -> Ident "=" Exp
+IfStmt     -> "if" "(" Exp ")" Bloque ("else" ("if" "(" Exp ")" Bloque | Bloque))?
+ForStmt    -> "for" "(" Decl? ";" Exp? ";" Asig? ")" Bloque
+PrintStmt  -> "Console" "." "WriteLine" "(" ArgList? ")"
+Bloque     -> "{" (Decl | Stmt)* "}"
+Exp        -> Exp ("=="|"!="|"<"|">"|"<="|">=") Exp
+            | Exp ("+"|"-"|"*"|"/"|"%") Exp
+            | Prim
+Prim       -> Número | Cadena | Ident | "(" Exp ")"`,
+  mysql: `Consulta   -> Select | Insert | Update | Delete
+Select     -> "SELECT" ListaCampos "FROM" Tabla (Join)* (Where)? (GroupBy)? (OrderBy)?
+Insert     -> "INSERT" "INTO" Tabla "(" ListaCampos ")" "VALUES" "(" ListaValores ")"
+Update     -> "UPDATE" Tabla "SET" Asignaciones (Where)?
+Delete     -> "DELETE" "FROM" Tabla (Where)?
+Join       -> ("INNER"|"LEFT"|"RIGHT")? "JOIN" Tabla "ON" Cond
+Where      -> "WHERE" Cond
+GroupBy    -> "GROUP" "BY" ListaCampos
+OrderBy    -> "ORDER" "BY" ListaCampos
+Cond       -> ExpComp (("AND"|"OR") ExpComp)*
+ExpComp    -> Campo OpComp Valor
+OpComp     -> "="|"<"|">"|"<="|">="|"!="
+ListaCampos-> Campo ("," Campo)*`,
+  python: `Programa -> (Stmt | Decl)*
+Decl     -> Ident "=" Exp
+Stmt     -> IfStmt | ForStmt | PrintStmt | Asig
+Asig     -> Ident "=" Exp
+IfStmt   -> "if" Exp ":" NL Bloque ( "elif" Exp ":" NL Bloque )* ( "else" ":" NL Bloque )?
+ForStmt  -> "for" Ident "in" LlamadaRange ":" NL Bloque
+PrintStmt-> "print" "(" ArgList? ")"
+Bloque   -> (Indent (Stmt | Decl))* (Dedent)?
+Exp      -> Exp ("=="|"!="|"<"|">"|"<="|">=") Exp
+         -> Exp ("+"|"-"|"*"|"/"|"%") Exp
+         | Prim
+Prim     -> Número | Cadena | Ident | "(" Exp ")"`
+};
+
+function showGrammar(lang) {
+  const g = GRAMATICAS[lang] || 'Sin gramática definida para este lenguaje.';
+  const box = document.getElementById('grammarBox');
+  if (box) box.textContent = g;
+}
+
+function renderDFAIdent() {
+  return `<svg width="560" height="160">
+    <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="10" refY="3" orient="auto"><path d="M0,0 L10,3 L0,6 Z"/></marker></defs>
+    <text x="10" y="20" fill="#9ca3af">DFA IDENT: [a-zA-Z_][a-zA-Z0-9_]*</text>
+    <circle cx="110" cy="100" r="30" fill="#111827" stroke="#58a6ff" stroke-width="2"/>
+    <text x="95" y="105" fill="#58a6ff">q0</text>
+    <circle cx="300" cy="100" r="30" fill="#111827" stroke="#34d399" stroke-width="2"/>
+    <circle cx="300" cy="100" r="24" fill="none" stroke="#34d399" stroke-width="2"/>
+    <text x="285" y="105" fill="#34d399">q1</text>
+    <path d="M 40 100 L 80 100" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="45" y="90" fill="#9ca3af">inicio</text>
+    <path d="M 140 100 L 270 100" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="170" y="90" fill="#9ca3af">[a-zA-Z_]</text>
+    <path d="M 330 100 C 390 60, 390 140, 330 100" stroke="#9ca3af" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+    <text x="360" y="100" fill="#9ca3af">[a-zA-Z0-9_]</text>
+  </svg>`;
+}
+
+function renderDFANumber() {
+  return `<svg width="640" height="190">
+    <defs><marker id="arrow2" markerWidth="10" markerHeight="10" refX="10" refY="3" orient="auto"><path d="M0,0 L10,3 L0,6 Z"/></marker></defs>
+    <text x="10" y="20" fill="#9ca3af">DFA NUMBER: [0-9]+(\.[0-9]+)?</text>
+    <circle cx="110" cy="120" r="30" fill="#111827" stroke="#58a6ff" stroke-width="2"/><text x="95" y="125" fill="#58a6ff">q0</text>
+    <circle cx="300" cy="120" r="30" fill="#111827" stroke="#34d399" stroke-width="2"/>
+    <circle cx="300" cy="120" r="24" fill="none" stroke="#34d399" stroke-width="2"/><text x="285" y="125" fill="#34d399">q1</text>
+    <circle cx="480" cy="120" r="30" fill="#111827" stroke="#34d399" stroke-width="2"/>
+    <circle cx="480" cy="120" r="24" fill="none" stroke="#34d399" stroke-width="2"/><text x="465" y="125" fill="#34d399">q2</text>
+    <path d="M 40 120 L 80 120" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow2)"/>
+    <text x="45" y="110" fill="#9ca3af">inicio</text>
+    <path d="M 140 120 L 270 120" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow2)"/>
+    <text x="185" y="110" fill="#9ca3af">[0-9]</text>
+    <path d="M 330 120 C 380 80, 380 160, 330 120" stroke="#9ca3af" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+    <text x="360" y="120" fill="#9ca3af">[0-9]</text>
+    <path d="M 300 90 L 300 60 L 480 60 L 480 90" stroke="#9ca3af" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+    <text x="378" y="52" fill="#9ca3af">.</text>
+    <path d="M 510 120 C 560 80, 560 160, 510 120" stroke="#9ca3af" stroke-width="2" fill="none" marker-end="url(#arrow2)"/>
+    <text x="535" y="120" fill="#9ca3af">[0-9]</text>
+  </svg>`;
+}
+
+function showAutomata(lang) {
+  const el = document.getElementById('automataContainer');
+  if (el) el.innerHTML = renderDFAIdent() + renderDFANumber();
+}
+
+// ============= CLASE COMPILADOR =============
+class Compiler {
+  constructor(code, language) {
+    this.code = code;
+    this.language = language;
+    this.tokens = [];
+    this.ast = null;
+    this.symbols = new Map();
+    this.intermediate = [];
+    this.optimized = [];
+    this.errors = [];
+    this.warnings = [];
+    this.tempCount = 0;
+    this.labelCount = 0;
+  }
+
+  // ===== FASE 1: ANÁLISIS LÉXICO =====
+  lexicalAnalysis() {
+    const keywords = {
+      python: ['if', 'else', 'elif', 'while', 'for', 'def', 'class', 'return', 'import', 'from', 'print', 'in', 'and', 'or', 'not', 'True', 'False', 'None'],
+      javascript: ['if', 'else', 'while', 'for', 'function', 'return', 'var', 'let', 'const', 'console', 'log', 'true', 'false', 'null', 'undefined', 'new', 'this'],
+      csharp: ['if', 'else', 'while', 'for', 'foreach', 'int', 'float', 'double', 'string', 'bool', 'void', 'class', 'return', 'Console', 'WriteLine', 'true', 'false', 'null', 'new'],
+      sql: ['SELECT', 'FROM', 'WHERE', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'TABLE', 'AND', 'OR', 'ORDER', 'BY', 'GROUP', 'HAVING', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER']
+    };
+
+    const langKeywords = keywords[this.language] || [];
+    const operators = ['===','!==','==','!=','<=','>=','&&','||','+=','-=','*=','/=','++','--','+','-','*','/','=','<','>','!','%','&','|','^'];
+    const delimiters = [';', ',', '(', ')', '{', '}', '[', ']', '.', ':'];
+
+    let i = 0, line = 1, col = 1;
+    
+    while (i < this.code.length) {
+      let char = this.code[i];
+      
+      // Saltos de línea
+      if (char === '\n') {
+        line++; col = 1; i++;
+        continue;
+      }
+      
+      // Espacios en blanco
+      if (/\s/.test(char)) {
+        col++; i++;
+        continue;
+      }
+      
+      // Comentarios
+      if (this.language === 'python' && char === '#') {
+        let comment = '';
+        while (i < this.code.length && this.code[i] !== '\n') {
+          comment += this.code[i++];
+        }
+        this.tokens.push({ type: 'comment', value: comment, line, col });
+        continue;
+      }
+      
+      if ((this.language === 'javascript' || this.language === 'csharp') && char === '/' && this.code[i+1] === '/') {
+        let comment = '';
+        while (i < this.code.length && this.code[i] !== '\n') {
+          comment += this.code[i++];
+        }
+        this.tokens.push({ type: 'comment', value: comment, line, col });
+        continue;
+      }
+
+      if ((this.language === 'sql') && char === '-' && this.code[i+1] === '-') {
+        let comment = '';
+        while (i < this.code.length && this.code[i] !== '\n') {
+          comment += this.code[i++];
+        }
+        this.tokens.push({ type: 'comment', value: comment, line, col });
+        continue;
+      }
+      
+      // Strings
+      if (char === '"' || char === "'") {
+        const quote = char;
+        let str = char;
+        i++; col++;
+        while (i < this.code.length && this.code[i] !== quote) {
+          if (this.code[i] === '\\') { str += this.code[i++]; }
+          str += this.code[i++];
+          col++;
+        }
+        if (i < this.code.length) { str += this.code[i++]; col++; }
+        this.tokens.push({ type: 'string', value: str, line, col: col - str.length });
+        continue;
+      }
+      
+      // Números
+      if (/[0-9]/.test(char)) {
+        let num = '';
+        const startCol = col;
+        while (i < this.code.length && /[0-9.]/.test(this.code[i])) {
+          num += this.code[i++];
+          col++;
+        }
+        this.tokens.push({ type: 'number', value: num, line, col: startCol });
+        continue;
+      }
+      
+      // Operadores de 3 caracteres
+      const threeChar = this.code.substring(i, i + 3);
+      if (operators.includes(threeChar)) {
+        this.tokens.push({ type: 'operator', value: threeChar, line, col });
+        i += 3; col += 3;
+        continue;
+      }
+
+      // Operadores de 2 caracteres
+      const twoChar = this.code.substring(i, i + 2);
+      if (operators.includes(twoChar)) {
+        this.tokens.push({ type: 'operator', value: twoChar, line, col });
+        i += 2; col += 2;
+        continue;
+      }
+      
+      // Operadores de 1 carácter
+      if (operators.includes(char)) {
+        this.tokens.push({ type: 'operator', value: char, line, col });
+        i++; col++;
+        continue;
+      }
+      
+      // Delimitadores
+      if (delimiters.includes(char)) {
+        this.tokens.push({ type: 'delimiter', value: char, line, col });
+        i++; col++;
+        continue;
+      }
+      
+      // Identificadores y palabras clave
+      if (/[a-zA-Z_]/.test(char)) {
+        let id = '';
+        const startCol = col;
+        while (i < this.code.length && /[a-zA-Z0-9_]/.test(this.code[i])) {
+          id += this.code[i++];
+          col++;
+        }
+        const type = langKeywords.includes(id) ? 'keyword' : 'identifier';
+        this.tokens.push({ type, value: id, line, col: startCol });
+        continue;
+      }
+      
+      // Desconocido
+      this.tokens.push({ type: 'unknown', value: char, line, col });
+      i++; col++;
+    }
+    
+    return this.tokens;
+  }
+
+  // ===== FASE 2: ANÁLISIS SINTÁCTICO =====
+  syntaxAnalysis() {
+    this.ast = { type: 'Program', body: [] };
+    this.currentIndex = 0;
+    const errors = [];
+
+    const peek = () => this.tokens[this.currentIndex];
+    const consume = () => this.tokens[this.currentIndex++];
+    const expect = (type, value = null) => {
+      const token = peek();
+      if (!token || token.type !== type || (value && token.value !== value)) {
+        errors.push(`Error sintáctico línea ${token?.line || 'EOF'}: Se esperaba ${type}${value ? ` '${value}'` : ''}`);
+        return null;
+      }
+      return consume();
+    };
+
+    // Parser simplificado para declaraciones y asignaciones
+    while (this.currentIndex < this.tokens.length) {
+      const token = peek();
+      
+      if (!token || token.type === 'comment') {
+        this.currentIndex++;
+        continue;
+      }
+
+      // Declaraciones de variables
+      if (token.type === 'keyword' && ['let', 'const', 'var', 'int', 'float', 'double', 'string'].includes(token.value)) {
+        const declType = consume();
+        const id = expect('identifier');
+        
+        if (id) {
+          const node = { type: 'VariableDeclaration', varType: declType.value, name: id.value, line: id.line };
+          
+          if (peek()?.value === '=') {
+            consume();
+            node.init = this.parseExpression();
+          }
+          
+          this.ast.body.push(node);
+          if (peek()?.value === ';') consume();
+        }
+      }
+      // Asignaciones
+      else if (token.type === 'identifier') {
+        const id = consume();
+        if (peek()?.value === '=') {
+          consume();
+          const node = {
+            type: 'Assignment',
+            target: id.value,
+            value: this.parseExpression(),
+            line: id.line
+          };
+          this.ast.body.push(node);
+          if (peek()?.value === ';') consume();
+        }
+      }
+      // If statements (con soporte para else if / else)
+      else if (token.type === 'keyword' && token.value === 'if') {
+        const parseIf = () => {
+          const ifTok = consume();
+          if (this.language !== 'python') { expect('delimiter', '('); }
+          const condition = this.parseExpression();
+          if (this.language !== 'python') { expect('delimiter', ')'); }
+          const node = { type: 'IfStatement', condition, consequent: [], alternate: null, line: ifTok.line };
+          if (peek()?.value === '{') {
+            consume(); let depth = 1;
+            while (depth > 0 && this.currentIndex < this.tokens.length) {
+              const t = peek();
+              if (t?.value === '{') depth++;
+              if (t?.value === '}') depth--;
+              this.currentIndex++;
+            }
+          } else if (peek()?.value === ':') {
+            consume();
+            while (this.currentIndex < this.tokens.length) {
+              this.currentIndex++;
+              if (peek()?.type === 'keyword' || (peek()?.line > ifTok.line && peek()?.col <= ifTok.col)) break;
+            }
+          }
+          while (peek() && peek().type === 'comment') consume();
+          if (peek() && peek().type === 'keyword' && peek().value === 'else') {
+            consume();
+            if (peek() && peek().type === 'keyword' && peek().value === 'if') {
+              node.alternate = parseIf();
+            } else {
+              if (peek()?.value === '{') {
+                consume(); let depth = 1;
+                while (depth > 0 && this.currentIndex < this.tokens.length) {
+                  const t = peek();
+                  if (t?.value === '{') depth++;
+                  if (t?.value === '}') depth--;
+                  this.currentIndex++;
+                }
+              } else if (peek()?.value === ':') {
+                consume();
+                while (this.currentIndex < this.tokens.length) {
+                  this.currentIndex++;
+                  if (peek()?.type === 'keyword') break;
+                }
+              }
+              node.alternate = [];
+            }
+          }
+          return node;
+        };
+        const ifNode = parseIf();
+        this.ast.body.push(ifNode);
+      }
+      
+      // Print/Console.log// Print/Console.log
+      else if ((token.type === 'keyword' && token.value === 'print') || 
+               (token.type === 'identifier' && token.value === 'console')) {
+        const printNode = { type: 'PrintStatement', line: token.line, arguments: [] };
+        consume();
+        
+        if (token.value === 'console') {
+          if (peek()?.value === '.') consume();
+          if (peek()?.value === 'log') consume();
+        }
+        
+        if (peek()?.value === '(') {
+          consume();
+          while (peek() && peek()?.value !== ')' && this.currentIndex < this.tokens.length) {
+            const arg = this.parseExpression();
+            if (arg) printNode.arguments.push(arg);
+            if (peek()?.value === ',') consume();
+            
+            // Prevención de bucle infinito
+            if (this.currentIndex >= this.tokens.length) break;
+          }
+          if (peek()?.value === ')') consume();
+        }
+        
+        this.ast.body.push(printNode);
+        if (peek()?.value === ';') consume();
+      }
+      else {
+        this.currentIndex++;
+      }
+      
+      // Prevención de bucle infinito
+      if (this.currentIndex > this.tokens.length + 100) {
+        errors.push('Error: bucle infinito detectado en análisis sintáctico');
+        break;
+      }
+    }
+
+    this.errors.push(...errors);
+    return { ast: this.ast, errors };
+  }
+
+  parseExpression() {
+    const left = this.parsePrimary();
+    if (!left) return null;
+    
+    const token = this.tokens[this.currentIndex];
+    
+    if (token?.type === 'operator' && ['+', '-', '*', '/', '>', '<', '>=', '<=', '==', '!=', '===', '!==', 'and', 'or'].includes(token.value)) {
+      this.currentIndex++;
+      const right = this.parsePrimary();
+      return { type: 'BinaryExpression', operator: token.value, left, right };
+    }
+    
+    return left;
+  }
+
+  parsePrimary() {
+    const token = this.tokens[this.currentIndex];
+    if (!token) return null;
+    
+    if (token.type === 'number') {
+      this.currentIndex++;
+      return { type: 'Literal', value: parseFloat(token.value), dataType: 'number' };
+    }
+    if (token.type === 'string') {
+      this.currentIndex++;
+      return { type: 'Literal', value: token.value, dataType: 'string' };
+    }
+    if (token.type === 'identifier' || token.type === 'keyword') {
+      this.currentIndex++;
+      return { type: 'Identifier', name: token.value };
+    }
+    
+    this.currentIndex++;
+    return { type: 'Unknown', value: token.value };
+  }
+
+  // ===== FASE 3: ANÁLISIS SEMÁNTICO =====
+  semanticAnalysis() {
+    const errors = [];
+    const warnings = [];
+    
+    // Recorrer el AST y construir tabla de símbolos
+    this.ast.body.forEach(node => {
+      if (node.type === 'VariableDeclaration') {
+        if (this.symbols.has(node.name)) {
+          errors.push(`Error semántico línea ${node.line}: Variable '${node.name}' ya declarada`);
+        } else {
+          this.symbols.set(node.name, {
+            name: node.name,
+            type: node.varType || 'inferred',
+            value: node.init?.value || 'undefined',
+            scope: 'global',
+            line: node.line,
+            used: false
+          });
+        }
+      }
+      
+      if (node.type === 'Assignment') {
+        if (!this.symbols.has(node.target)) {
+          if (this.language === 'python' || this.language === 'javascript') {
+            this.symbols.set(node.target, {
+              name: node.target,
+              type: 'inferred',
+              value: 'assigned',
+              scope: 'global',
+              line: node.line,
+              used: true
+            });
+          } else {
+            errors.push(`Error semántico línea ${node.line}: Variable '${node.target}' no declarada`);
+          }
+        } else {
+          this.symbols.get(node.target).used = true;
+        }
+      }
+      
+      if (node.type === 'PrintStatement') {
+        node.arguments.forEach(arg => {
+          if (arg.type === 'Identifier') {
+            if (this.symbols.has(arg.name)) {
+              this.symbols.get(arg.name).used = true;
+            } else {
+              errors.push(`Error semántico línea ${node.line}: Variable '${arg.name}' no definida`);
+            }
+          }
+        });
+      }
+    });
+    
+    // Advertencias de variables no usadas
+    this.symbols.forEach(symbol => {
+      if (!symbol.used) {
+        warnings.push(`Advertencia línea ${symbol.line}: Variable '${symbol.name}' declarada pero no usada`);
+      }
+    });
+    
+    this.errors.push(...errors);
+    this.warnings.push(...warnings);
+    
+    return { symbols: this.symbols, errors, warnings };
+  }
+
+  // ===== FASE 4: CÓDIGO INTERMEDIO (3 DIRECCIONES) =====
+  generateIntermediate() {
+    this.ast.body.forEach(node => {
+      if (node.type === 'VariableDeclaration' && node.init) {
+        const result = this.genExpr(node.init);
+        this.intermediate.push(`${node.name} = ${result}`);
+      }
+      
+      if (node.type === 'Assignment') {
+        const result = this.genExpr(node.value);
+        this.intermediate.push(`${node.target} = ${result}`);
+      }
+      
+      if (node.type === 'PrintStatement') {
+        node.arguments.forEach(arg => {
+          const result = this.genExpr(arg);
+          this.intermediate.push(`PRINT ${result}`);
+        });
+      }
+      
+      if (node.type === 'IfStatement') {
+        const condResult = this.genExpr(node.condition);
+        const label = this.newLabel();
+        this.intermediate.push(`IF_FALSE ${condResult} GOTO ${label}`);
+        this.intermediate.push(`LABEL ${label}`);
+      }
+    });
+    
+    return this.intermediate;
+  }
+
+  genExpr(expr) {
+    if (!expr) return 'null';
+    
+    if (expr.type === 'Literal') {
+      return expr.value.toString();
+    }
+    
+    if (expr.type === 'Identifier') {
+      return expr.name;
+    }
+    
+    if (expr.type === 'BinaryExpression') {
+      const left = this.genExpr(expr.left);
+      const right = this.genExpr(expr.right);
+      const temp = this.newTemp();
+      this.intermediate.push(`${temp} = ${left} ${expr.operator} ${right}`);
+      return temp;
+    }
+    
+    return 'unknown';
+  }
+
+  newTemp() {
+    return `t${this.tempCount++}`;
+  }
+
+  newLabel() {
+    return `L${this.labelCount++}`;
+  }
+
+  // ===== FASE 5: OPTIMIZACIÓN =====
+  optimize() {
+    this.optimized = [...this.intermediate];
+    
+    // Optimización 1: Propagación de constantes
+    const constants = new Map();
+    this.optimized = this.optimized.map(line => {
+      const match = line.match(/^(\w+) = (\d+)$/);
+      if (match) {
+        constants.set(match[1], match[2]);
+      }
+      
+      // Reemplazar variables con sus valores constantes
+      constants.forEach((value, name) => {
+        const regex = new RegExp(`\\b${name}\\b`, 'g');
+        line = line.replace(regex, value);
+      });
+      
+      return line;
+    });
+    
+    // Optimización 2: Expresiones constantes
+    this.optimized = this.optimized.map(line => {
+      const match = line.match(/^(\w+) = (\d+) ([+\-*\/]) (\d+)$/);
+      if (match) {
+        const [, temp, left, op, right] = match;
+        const a = parseFloat(left);
+        const b = parseFloat(right);
+        let result;
+        
+        switch(op) {
+          case '+': result = a + b; break;
+          case '-': result = a - b; break;
+          case '*': result = a * b; break;
+          case '/': result = a / b; break;
+          default: return line;
+        }
+        
+        return `${temp} = ${result}`;
+      }
+      return line;
+    });
+    
+    // Optimización 3: Eliminación de código muerto
+    const usedVars = new Set();
+    this.optimized.forEach(line => {
+      const matches = line.match(/\b[a-zA-Z_]\w*\b/g);
+      if (matches) {
+        matches.forEach(v => {
+          if (!line.startsWith(v + ' =')) {
+            usedVars.add(v);
+          }
+        });
+      }
+    });
+    
+    this.optimized = this.optimized.filter(line => {
+      const match = line.match(/^(\w+) =/);
+      if (match && match[1].startsWith('t') && !usedVars.has(match[1])) {
+        return false;
+      }
+      return true;
+    });
+    
+    return this.optimized;
+  }
+
+  // ===== COMPILAR TODO =====
+  compile() {
+    this.lexicalAnalysis();
+    this.syntaxAnalysis();
+    this.semanticAnalysis();
+    this.generateIntermediate();
+    this.optimize();
+    
+    return {
+      tokens: this.tokens,
+      ast: this.ast,
+      symbols: this.symbols,
+      intermediate: this.intermediate,
+      optimized: this.optimized,
+      errors: this.errors,
+      warnings: this.warnings
+    };
+  }
+}
+
+// Función auxiliar para peek y consume
+let tokenIndex = 0;
+function peek() {
+  return compiler.tokens[tokenIndex];
+}
+function consume() {
+  return compiler.tokens[tokenIndex++];
+}
+
+let compiler = null;
+
+// ============= FUNCIÓN COMPILAR =============
+function compileCode() {
+  const code = editor.getValue();
+  const lang = languageSelect.value;
+  
+  if (!code.trim()) {
+    document.getElementById('output').innerHTML = '<div class="error">⚠️ No hay código para compilar</div>';
+    return;
+  }
+  
+  compiler = new Compiler(code, lang);
+  tokenIndex = 0;
+  const result = compiler.compile();
+  showGrammar(lang);
+  showAutomata(lang);
+  
+  // Mostrar resultados léxicos
+  displayLexicalResults(result.tokens);
+  
+  // Mostrar resultados sintácticos
+  displaySyntaxResults(result.ast, result.errors);
+  
+  // Mostrar resultados semánticos
+  displaySemanticResults(result.errors, result.warnings);
+  
+  // Mostrar tabla de símbolos
+  displaySymbolTable(result.symbols);
+  
+  // Mostrar código intermedio
+  displayIntermediateCode(result.intermediate);
+  
+  // Mostrar código optimizado
+  displayOptimizedCode(result.optimized);
+  
+  // Mostrar resumen en salida
+  if (result.errors.length > 0) {
+    document.getElementById('output').innerHTML = 
+      '<div class="error">❌ Compilación fallida con errores:</div>' +
+      result.errors.map(e => `<div class="error">${e}</div>`).join('');
+  } else {
+    document.getElementById('output').innerHTML = 
+      '<div class="success">✅ Compilación exitosa!</div>' +
+      (result.warnings.length > 0 ? 
+        '<div class="warning">⚠️ Advertencias:</div>' + 
+        result.warnings.map(w => `<div class="warning">${w}</div>`).join('') : '') +
+      '<div style="margin-top: 10px;">📊 Tokens: ' + result.tokens.length + '</div>' +
+      '<div>🌳 Nodos AST: ' + result.ast.body.length + '</div>' +
+      '<div>📋 Símbolos: ' + result.symbols.size + '</div>' +
+      '<div>⚡ Código intermedio: ' + result.intermediate.length + ' líneas</div>' +
+      '<div>🎯 Código optimizado: ' + result.optimized.length + ' líneas</div>';
+  }
+}
+
+// ============= MOSTRAR RESULTADOS LÉXICOS =============
+function displayLexicalResults(tokens) {
+  const summary = document.getElementById('lexicalSummary');
+  const tbody = document.querySelector('#tokensTable tbody');
+  tbody.innerHTML = '';
+  
+  const stats = {};
+  tokens.forEach(t => {
+    stats[t.type] = (stats[t.type] || 0) + 1;
+  });
+  
+  summary.innerHTML = `
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 15px;">
+      <div style="background: #1f2937; padding: 10px; border-radius: 6px;">
+        <div style="color: #9ca3af; font-size: 0.85em;">Total Tokens</div>
+        <div style="font-size: 1.5em; font-weight: bold; color: #3b82f6;">${tokens.length}</div>
+      </div>
+      <div style="background: #1f2937; padding: 10px; border-radius: 6px;">
+        <div style="color: #9ca3af; font-size: 0.85em;">Identificadores</div>
+        <div style="font-size: 1.5em; font-weight: bold; color: #10b981;">${stats.identifier || 0}</div>
+      </div>
+      <div style="background: #1f2937; padding: 10px; border-radius: 6px;">
+        <div style="color: #9ca3af; font-size: 0.85em;">Palabras Clave</div>
+        <div style="font-size: 1.5em; font-weight: bold; color: #8b5cf6;">${stats.keyword || 0}</div>
+      </div>
+      <div style="background: #1f2937; padding: 10px; border-radius: 6px;">
+        <div style="color: #9ca3af; font-size: 0.85em;">Operadores</div>
+        <div style="font-size: 1.5em; font-weight: bold; color: #f59e0b;">${stats.operator || 0}</div>
+      </div>
+    </div>
+  `;
+  
+  tokens.forEach((token, index) => {
+    const row = tbody.insertRow();
+    row.innerHTML = `
+      <td>${index + 1}</td>
+      <td><code>${escapeHtml(token.value)}</code></td>
+      <td><span class="token-type ${token.type}">${token.type.toUpperCase()}</span></td>
+      <td>${token.line}</td>
+      <td>${token.col}</td>
+      <td>${getTokenDescription(token.type)}</td>
+    `;
+  });
+}
+
+// ============= MOSTRAR RESULTADOS SINTÁCTICOS =============
+function displaySyntaxResults(ast, errors) {
+  const syntaxDiv = document.getElementById('syntaxResult');
+  const astDiv = document.getElementById('astTree');
+  
+  if (errors.filter(e => e.includes('sintáctico')).length > 0) {
+    syntaxDiv.innerHTML = errors
+      .filter(e => e.includes('sintáctico'))
+      .map(e => `<div class="error">${e}</div>`)
+      .join('');
+    astDiv.innerHTML = '<div style="color: #6b7280; font-style: italic;">Árbol no generado debido a errores</div>';
+  } else {
+    syntaxDiv.innerHTML = '<div class="success">✅ Análisis sintáctico completado sin errores</div>';
+    astDiv.innerHTML = '<div style="margin-top: 15px;"><strong>Árbol Sintáctico Abstracto (AST):</strong></div>' + 
+                       renderAST(ast);
+  }
+}
+
+function renderAST(node, depth = 0) {
+  if (!node) return '';
+  
+  let html = '';
+  const indent = '  '.repeat(depth);
+  
+  if (node.type === 'Program') {
+    html += `<div class="tree-node"><span class="node-type">Program</span></div>`;
+    node.body.forEach((child, i) => {
+      html += renderAST(child, depth + 1);
+    });
+  } else if (node.type === 'VariableDeclaration') {
+    html += `<div class="tree-node"><span class="node-type">VariableDeclaration</span> [${node.varType}] <span class="node-value">${node.name}</span></div>`;
+    if (node.init) {
+      html += renderAST(node.init, depth + 1);
+    }
+  } else if (node.type === 'Assignment') {
+    html += `<div class="tree-node"><span class="node-type">Assignment</span> → <span class="node-value">${node.target}</span></div>`;
+    html += renderAST(node.value, depth + 1);
+  } else if (node.type === 'BinaryExpression') {
+    html += `<div class="tree-node"><span class="node-type">BinaryExpression</span> [${node.operator}]</div>`;
+    html += renderAST(node.left, depth + 1);
+    html += renderAST(node.right, depth + 1);
+  } else if (node.type === 'Literal') {
+    html += `<div class="tree-node"><span class="node-type">Literal</span> <span class="node-value">${node.value}</span> (${node.dataType})</div>`;
+  } else if (node.type === 'Identifier') {
+    html += `<div class="tree-node"><span class="node-type">Identifier</span> <span class="node-value">${node.name}</span></div>`;
+  } else if (node.type === 'PrintStatement') {
+    html += `<div class="tree-node"><span class="node-type">PrintStatement</span></div>`;
+    node.arguments.forEach(arg => {
+      html += renderAST(arg, depth + 1);
+    });
+  } else if (node.type === 'IfStatement') {
+    html += `<div class="tree-node"><span class="node-type">IfStatement</span></div>`;
+    html += renderAST(node.condition, depth + 1);
+  }
+  
+  return html;
+}
+
+// ============= MOSTRAR RESULTADOS SEMÁNTICOS =============
+function displaySemanticResults(errors, warnings) {
+  const semanticDiv = document.getElementById('semanticResult');
+  
+  const semanticErrors = errors.filter(e => e.includes('semántico'));
+  
+  let html = '';
+  
+  if (semanticErrors.length === 0) {
+    html += '<div class="success">✅ Análisis semántico completado sin errores</div>';
+  } else {
+    html += semanticErrors.map(e => `<div class="error">${e}</div>`).join('');
+  }
+  
+  if (warnings.length > 0) {
+    html += '<div style="margin-top: 15px;"><strong>Advertencias:</strong></div>';
+    html += warnings.map(w => `<div class="warning">${w}</div>`).join('');
+  }
+  
+  semanticDiv.innerHTML = html;
+}
+
+// ============= MOSTRAR TABLA DE SÍMBOLOS =============
+function displaySymbolTable(symbols) {
+  const tbody = document.querySelector('#symbolsTable tbody');
+  tbody.innerHTML = '';
+  
+  if (symbols.size === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #6b7280;">No hay símbolos definidos</td></tr>';
+    return;
+  }
+  
+  symbols.forEach(symbol => {
+    const row = tbody.insertRow();
+    row.className = 'symbol-row';
+    row.innerHTML = `
+      <td><strong>${symbol.name}</strong></td>
+      <td><span class="token-type identifier">${symbol.type}</span></td>
+      <td><code>${escapeHtml(String(symbol.value))}</code></td>
+      <td>${symbol.scope}</td>
+      <td>${symbol.line}</td>
+      <td>${symbol.used ? '✓ Sí' : '✗ No'}</td>
+    `;
+  });
+}
+
+// ============= MOSTRAR CÓDIGO INTERMEDIO =============
+function displayIntermediateCode(intermediate) {
+  const div = document.getElementById('intermediateCode');
+  
+  if (intermediate.length === 0) {
+    div.innerHTML = '<div style="color: #6b7280; font-style: italic;">No se generó código intermedio</div>';
+    return;
+  }
+  
+  div.innerHTML = intermediate.map((line, i) => 
+    `<div><span style="color: #6b7280;">${String(i + 1).padStart(3, '0')}:</span> ${escapeHtml(line)}</div>`
+  ).join('');
+}
+
+// ============= MOSTRAR CÓDIGO OPTIMIZADO =============
+function displayOptimizedCode(optimized) {
+  const div = document.getElementById('optimizedCode');
+  
+  if (optimized.length === 0) {
+    div.innerHTML = '<div style="color: #6b7280; font-style: italic;">No se generó código optimizado</div>';
+    return;
+  }
+  
+  const savings = compiler.intermediate.length - optimized.length;
+  const percentage = ((savings / compiler.intermediate.length) * 100).toFixed(1);
+  
+  div.innerHTML = `
+    <div style="background: #1f2937; padding: 10px; border-radius: 6px; margin-bottom: 10px;">
+      <strong>Optimización:</strong> ${savings} líneas eliminadas (${percentage}% de reducción)
+    </div>
+  ` + optimized.map((line, i) => 
+    `<div><span style="color: #6b7280;">${String(i + 1).padStart(3, '0')}:</span> ${escapeHtml(line)}</div>`
+  ).join('');
+}
+
+// ============= EJECUTAR CÓDIGO =============
+async function executeCode() {
+  if (!compiler || compiler.errors.length > 0) {
+    document.getElementById('output').innerHTML = 
+      '<div class="error">❌ No se puede ejecutar: hay errores de compilación</div>' +
+      '<div style="margin-top: 10px;">Primero compila el código sin errores.</div>';
+    return;
+  }
+  
+  const code = editor.getValue();
+  const lang = languageSelect.value;
+  
+  document.querySelector('.tab[data-tab="output"]').click();
+  
+  if (lang === 'python') {
+    try {
+      document.getElementById('output').innerHTML = '<div class="warning">🔄 Cargando Python (Pyodide)...</div>';
+      if (!window.pyodide) {
+        window.pyodide = await loadPyodide();
+      }
+      
+      // Capturar salida
+      const captureOutput = `
+import sys
+from io import StringIO
+sys.stdout = StringIO()
+sys.stderr = StringIO()
+`;
+      await pyodide.runPythonAsync(captureOutput);
+      
+      // Ejecutar código
+      await pyodide.runPythonAsync(code);
+      
+      // Obtener salida
+      const stdout = pyodide.runPython('sys.stdout.getvalue()');
+      const stderr = pyodide.runPython('sys.stderr.getvalue()');
+      
+      let output = '<div class="success">✅ Ejecución completada</div><div style="margin-top: 10px;">';
+      if (stdout) output += `<strong>Salida:</strong><br>${escapeHtml(stdout).replace(/\n/g, '<br>')}`;
+      if (stderr) output += `<div class="error"><strong>Errores:</strong><br>${escapeHtml(stderr).replace(/\n/g, '<br>')}</div>`;
+      if (!stdout && !stderr) output += '<div style="color: #6b7280;">(Sin salida)</div>';
+      output += '</div>';
+      
+      document.getElementById('output').innerHTML = output;
+    } catch (err) {
+      document.getElementById('output').innerHTML = 
+        `<div class="error">❌ Error de ejecución Python:</div>
+         <div class="code-output">${escapeHtml(err.message)}</div>`;
+    }
+  } else if (lang === 'javascript') {
+    try {
+      const logs = [];
+      const originalLog = console.log;
+      const originalError = console.error;
+      
+      console.log = (...args) => logs.push({ type: 'log', content: args.join(' ') });
+      console.error = (...args) => logs.push({ type: 'error', content: args.join(' ') });
+      
+      eval(code);
+      
+      console.log = originalLog;
+      console.error = originalError;
+      
+      let output = '<div class="success">✅ Ejecución completada</div><div style="margin-top: 10px;">';
+      if (logs.length > 0) {
+        output += '<strong>Salida:</strong><br>';
+        logs.forEach(log => {
+          if (log.type === 'error') {
+            output += `<div class="error">${escapeHtml(log.content)}</div>`;
+          } else {
+            output += `<div>${escapeHtml(log.content)}</div>`;
+          }
+        });
+      } else {
+        output += '<div style="color: #6b7280;">(Sin salida)</div>';
+      }
+      output += '</div>';
+      
+      document.getElementById('output').innerHTML = output;
+    } catch (err) {
+      document.getElementById('output').innerHTML = 
+        `<div class="error">❌ Error de ejecución JavaScript:</div>
+         <div class="code-output">${escapeHtml(err.message)}</div>`;
+    }
+  } else if (lang === 'csharp') {
+    document.getElementById('output').innerHTML = 
+      '<div class="warning">⚠️ Ejecución de C# no disponible</div>' +
+      '<div style="margin-top: 10px;">C# requiere un compilador backend. El código fue compilado exitosamente a código intermedio.</div>' +
+      '<div style="margin-top: 10px;"><strong>Código intermedio generado:</strong></div>' +
+      '<div class="code-output">' + compiler.optimized.map(line => escapeHtml(line)).join('<br>') + '</div>';
+  } else if (lang === 'sql' || lang === 'mysql') {
+    document.getElementById('output').innerHTML = 
+      '<div class="warning">⚠️ Ejecución de SQL no disponible</div>' +
+      '<div style="margin-top: 10px;">SQL requiere una base de datos conectada. El código fue compilado exitosamente.</div>' +
+      '<div style="margin-top: 10px;"><strong>Query analizado:</strong></div>' +
+      '<div class="code-output">' + escapeHtml(code) + '</div>';
+  }
+}
+
+// ============= UTILIDADES =============
+function escapeHtml(text) {
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return String(text).replace(/[&<>"']/g, m => map[m]);
+}
+
+function getTokenDescription(type) {
+  const descriptions = {
+    keyword: 'Palabra reservada',
+    identifier: 'Identificador',
+    number: 'Número literal',
+    string: 'Cadena de texto',
+    operator: 'Operador',
+    delimiter: 'Delimitador',
+    comment: 'Comentario',
+    unknown: 'Token desconocido'
+  };
+  return descriptions[type] || 'Desconocido';
+}
+
+// ============= EVENT LISTENERS =============
+document.getElementById('btnCompile').onclick = compileCode;
+document.getElementById('btnRun').onclick = executeCode;
+
+// ============= INICIALIZACIÓN =============
+window.onload = () => {
+  editor.setValue(ejemplos['python'], -1);
+  showGrammar('python');
+  showAutomata('python');
+  document.getElementById('output').innerHTML = 
+    '<div style="color: #6b7280; text-align: center; padding: 40px;">' +
+    '<div style="font-size: 3em;">🚀</div>' +
+    '<div style="font-size: 1.2em; margin-top: 10px;">Compilador Multi-Lenguaje</div>' +
+    '<div style="margin-top: 10px;">Escribe código y presiona <strong>Compilar Todo</strong></div>' +
+    '</div>';
+};
+</script>
+</body>
+</html>
